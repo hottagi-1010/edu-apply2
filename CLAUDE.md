@@ -50,7 +50,7 @@
 | 구분      | 이름                                                                   |
 |---|---|
 | 함수(logic.js) | isDuplicate(apps, name, course), isFull(apps, courses, course), calcYearHours(apps, name, year), canChangeStatus(current, next), activeCount(apps, course), getCapacity(courses, course), hoursByPerson(apps, year), sortByDate(apps), courseNames(apps, courses), courseDate(apps, course), formatDate(d), todayStr(), daysUntil(target, base), isWithin7Days(target, base), toCSV(rows) |
-| 함수(app.js) 저장 | loadData(), insertApp(app), updateStatus(id, newStatus), updateCapacity(course, capacity) |
+| 함수(app.js) 저장 | loadData(), insertApp(app), updateStatus(id, newStatus), updateCapacity(course, capacity), checkConfig(), fromRow(r), dbError(error) |
 | 함수(app.js) 화면 | addApplication(), renderList(), renderSummary(), renderHours(), renderAll(), changeStatus(id, newStatus), setCapacity(course, value), downloadCSV(course), showMessage(text, type), **reloadData()** |
 | 화면 id   | applyForm, courseInput, courseOptions, dateInput, hoursInput, nameInput, teamInput, applyBtn, msgBox, applicationList, courseSummary, hoursTable, saveMode, **reloadBtn** |
 | **설정(config.js)** | SUPABASE_URL, SUPABASE_KEY |
@@ -63,3 +63,4 @@
 
 ## 자주 발생한 오류와 해결 (Debug Loop에서 배운 것 – 계속 추가)
 - getElementById 결과는 사용 전에 있는지 확인하고, 없으면 콘솔에 '요소 없음: id'를 표시한다.
+- config.js가 비어 있거나 비밀 키가 들어 있으면 연결하지 않고 화면에 이유를 보여 준다. (checkConfig)

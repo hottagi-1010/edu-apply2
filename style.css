@@ -26,6 +26,7 @@ body {
 .top h1 { margin: 0; font-size: 20px; }
 .tag { font-size: 12px; padding: 2px 8px; border: 1px solid #fff; border-radius: 10px; }
 .mode { margin-left: auto; font-size: 13px; opacity: .9; }
+.top button.ghost { background: transparent; color: #fff; border-color: #fff; }
 
 main { max-width: 1080px; margin: 0 auto; padding: 16px; }
 section { margin-bottom: 18px; }
