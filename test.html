@@ -55,6 +55,19 @@
     check('날짜', 'formatDate가 한국 시간 기준 날짜를 돌려줌', () => formatDate(new Date(2026, 9, 13, 0, 30)) === '2026-10-13');
     check('F-07', 'CSV 맨 앞에 BOM이 있음', () => toCSV([]).charCodeAt(0) === 0xFEFF);
 
+    // Phase 5 : 내 신청(F-14) · 삭제(R-09)
+    const mine = [
+      { id: 1, course: 'A과정', name: '김가상', status: '신청', userId: 'u1' },
+      { id: 2, course: 'A과정', name: '이가상', status: '이수', userId: 'u1' },
+      { id: 3, course: 'A과정', name: '박가상', status: '신청', userId: 'u2' },
+    ];
+    check('T-14', '내 신청(myApps)은 내 계정 것만', () => myApps(mine, 'u1').length === 2);
+    check('T-14', '로그인 안 하면 내 신청 없음', () => myApps(mine, null).length === 0);
+    check('T-15', '내가 넣은 것만 삭제 가능', () => canDelete(mine[0], 'u1'));
+    check('T-15', '남의 신청은 삭제 불가', () => !canDelete(mine[2], 'u1'));
+    check('T-16', '이수된 내 신청은 삭제 불가', () => !canDelete(mine[1], 'u1'));
+    check('T-16', '로그인 안 하면 삭제 불가', () => !canDelete(mine[0], null));
+
     const body = document.getElementById('results');
     for (const r of rows) {
       const tr = document.createElement('tr');

@@ -46,6 +46,17 @@ function canChangeStatus(current, next) {
   return current === STATUS.APPLY && (next === STATUS.DONE || next === STATUS.CANCEL);
 }
 
+// F-14 내 신청 : 로그인한 계정(userId)이 넣은 신청만 (로그인 전에는 없음)
+function myApps(apps, userId) {
+  if (!userId) return [];
+  return apps.filter(a => a.userId === userId);
+}
+
+// R-09 삭제 : 내 신청(userId 일치)이면서 상태가 '신청'일 때만
+function canDelete(app, userId) {
+  return !!userId && app.userId === userId && app.status === STATUS.APPLY;
+}
+
 // 개인별 올해 누적 이수 시간 표 (시간 많은 순, 같으면 이름 순)
 function hoursByPerson(apps, year) {
   const names = [...new Set(apps.map(a => normName(a.name)))];

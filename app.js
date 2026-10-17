@@ -1,8 +1,9 @@
 // app.js – 화면 동작 (입력 받기, 목록 그리기, 버튼 이벤트)
 // 규칙 판정은 logic.js 함수를 부른다.
 
-let apps = [];     // edu_apps
-let courses = [];  // edu_courses
+let apps = [];        // edu_apps
+let courses = [];     // edu_courses
+let currentUser = null; // 로그인한 사용자 (없으면 null)
 
 // ===== 저장 위치 : Supabase DB =====
 // 데이터를 읽고 쓰는 곳은 이 네 함수뿐이다. (3회차 localStorage 버전에서 이 구역만 바뀌었다)
@@ -29,10 +30,10 @@ if (!configProblem) {
   }
 }
 
-// DB 한 줄 → 화면에서 쓰는 모양 (created_at → createdAt)
+// DB 한 줄 → 화면에서 쓰는 모양 (created_at → createdAt, user_id → userId)
 function fromRow(r) {
   return { id: r.id, course: r.course, date: r.date, hours: r.hours, name: r.name,
-    team: r.team, status: r.status, createdAt: r.created_at };
+    team: r.team, status: r.status, userId: r.user_id, createdAt: r.created_at };
 }
 
 // DB가 보낸 거부 이유를 화면 메시지로
@@ -80,6 +81,37 @@ async function updateStatus(id, newStatus) {
 async function updateCapacity(course, capacity) {
   const { error } = await db.from('edu_courses').update({ capacity }).eq('course', course);
   if (error) throw dbError(error);
+  await loadData();
+}
+
+// F-12 현재 로그인 사용자 (없으면 null). 로그인 상태 저장은 supabase-js가 한다.
+async function loadUser() {
+  if (!db) throw new Error(configProblem || 'Supabase에 연결하지 못했습니다.');
+  const { data, error } = await db.auth.getSession();
+  if (error) throw new Error(error.message);
+  return data.session ? data.session.user : null;
+}
+
+async function signIn(email, password) {
+  const { error } = await db.auth.signInWithPassword({ email, password });
+  if (error) throw new Error(error.message);
+}
+
+async function signUp(email, password) {
+  const { error } = await db.auth.signUp({ email, password });
+  if (error) throw new Error(error.message);
+}
+
+async function signOut() {
+  const { error } = await db.auth.signOut();
+  if (error) throw new Error(error.message);
+}
+
+// F-15 내 신청 삭제 : RLS가 남의 줄을 0줄로 막는다 → 0줄이면 내 것이 아님
+async function deleteApp(id) {
+  const { data, error } = await db.from('edu_apps').delete().eq('id', id).select('id');
+  if (error) throw dbError(error);
+  if (!data || data.length === 0) throw new Error('내 신청만 지울 수 있습니다.');
   await loadData();
 }
 // ===== 저장 위치 끝 =====
@@ -203,11 +235,11 @@ function renderList() {
     const tr = make('tr');
     tr.append(make('td', a.date), make('td', a.course), make('td', a.hours + '시간'),
       make('td', a.name), make('td', a.team));
-    const st = make('td');
+    const st = make('td', undefined, 'only-in');
     st.append(make('span', a.status, 'badge st-' + a.status));
     tr.append(st);
 
-    const act = make('td');
+    const act = make('td', undefined, 'only-in');
     for (const next of [STATUS.DONE, STATUS.CANCEL]) {
       const btn = make('button', next, 'small');
       btn.disabled = !canChangeStatus(a.status, next);    // T-06
@@ -240,7 +272,7 @@ function renderSummary() {
     card.append(make('div', date ? '교육일 ' + date : '교육일 미정', 'muted'));
     card.append(make('div', `${count} / ${cap}명`, 'count'));
 
-    const capRow = make('label', '정원 ', 'cap-row');
+    const capRow = make('label', '정원 ', 'cap-row only-in');
     const capInput = make('input');
     capInput.type = 'number'; capInput.min = 1; capInput.max = 100; capInput.value = cap;
     capInput.addEventListener('change', () => setCapacity(course, capInput.value));
@@ -276,9 +308,121 @@ function renderHours() {
 }
 
 function renderAll() {
+  renderAuth();
   renderSummary();
   renderList();
+  renderMyApps();
   renderHours();
+}
+
+// ---- F-12/F-13 로그인 전·후 화면 ----
+// 로그인 여부에 따라 only-out / only-in 을 body 클래스로 토글
+function renderAuth() {
+  document.body.classList.toggle('signed-in', !!currentUser);
+  const email = $('userEmail');
+  if (email) email.textContent = currentUser ? currentUser.email : '';
+}
+
+// 로그인 상태를 다시 읽어 화면을 갱신한다 (로그인/회원가입/로그아웃 뒤 공통)
+async function refreshAuth() {
+  try {
+    currentUser = await loadUser();
+  } catch (e) {
+    currentUser = null;
+  }
+  if (currentUser) {
+    try {
+      await loadData();
+    } catch (e) {
+      showMessage('데이터를 불러오지 못했습니다 : ' + e.message, 'error');
+    }
+  }
+  renderAll();
+}
+
+// F-14 내 신청 표 : 내가 넣은 신청만, '신청' 상태면 삭제 버튼
+function renderMyApps() {
+  const body = $('myAppList');
+  if (!body) return;
+  body.replaceChildren();
+  if (!currentUser) return;
+  for (const a of sortByDate(myApps(apps, currentUser.id))) {
+    const tr = make('tr');
+    tr.append(make('td', a.date), make('td', a.course), make('td', a.hours + '시간'),
+      make('td', a.name), make('td', a.team));
+    const st = make('td');
+    st.append(make('span', a.status, 'badge st-' + a.status));
+    tr.append(st);
+
+    const act = make('td');
+    if (canDelete(a, currentUser.id)) {                     // R-09
+      const btn = make('button', '삭제', 'small ghost');
+      btn.addEventListener('click', () => removeApp(a.id));
+      act.append(btn);
+    }
+    tr.append(act);
+    body.append(tr);
+  }
+}
+
+async function doSignIn() {
+  const email = $('emailInput').value.trim();
+  const password = $('passwordInput').value;
+  if (!email || !password) {
+    showMessage('이메일과 비밀번호를 입력해 주세요.', 'error');
+    return;
+  }
+  try {
+    await signIn(email, password);
+  } catch (e) {
+    showMessage('로그인하지 못했습니다 : ' + e.message, 'error');
+    return;
+  }
+  $('loginForm').reset();
+  await refreshAuth();
+  showMessage('로그인되었습니다.', 'ok');
+}
+
+async function doSignUp() {
+  const email = $('emailInput').value.trim();
+  const password = $('passwordInput').value;
+  if (!email || !password) {
+    showMessage('이메일과 비밀번호를 입력해 주세요.', 'error');
+    return;
+  }
+  try {
+    await signUp(email, password);
+  } catch (e) {
+    showMessage('회원가입하지 못했습니다 : ' + e.message, 'error');
+    return;
+  }
+  $('loginForm').reset();
+  await refreshAuth();
+  showMessage('회원가입되었습니다. 바로 로그인됩니다.', 'ok');
+}
+
+async function doSignOut() {
+  try {
+    await signOut();
+  } catch (e) {
+    showMessage('로그아웃하지 못했습니다 : ' + e.message, 'error');
+    return;
+  }
+  await refreshAuth();
+  showMessage('로그아웃되었습니다.', 'ok');
+}
+
+// F-15 삭제 버튼 → 저장 함수(deleteApp) 호출
+async function removeApp(id) {
+  try {
+    await deleteApp(id);
+  } catch (e) {
+    showMessage('삭제하지 못했습니다 : ' + e.message, 'error');
+    renderAll();
+    return;
+  }
+  showMessage('내 신청을 삭제했습니다.', 'ok');
+  renderAll();
 }
 
 // F-10 다른 사람이 등록한 내용 다시 읽기
@@ -303,11 +447,20 @@ function fillCourseInfo() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+  $('loginForm').addEventListener('submit', e => { e.preventDefault(); doSignIn(); });
+  $('signUpBtn').addEventListener('click', doSignUp);
+  $('logoutBtn').addEventListener('click', doSignOut);
   $('applyForm').addEventListener('submit', e => { e.preventDefault(); addApplication(); });
   $('courseInput').addEventListener('change', fillCourseInfo);
   $('reloadBtn').addEventListener('click', reloadData);
+
   try {
-    await loadData();
+    currentUser = await loadUser();   // 새로고침해도 로그인 유지
+  } catch (e) {
+    currentUser = null;
+  }
+  try {
+    await loadData();                 // 읽기는 로그인 없이도 가능
   } catch (e) {
     showMessage('데이터를 불러오지 못했습니다 : ' + e.message, 'error');
   }
